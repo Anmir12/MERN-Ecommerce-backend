@@ -106,39 +106,35 @@ export const singelProduct = TryCatch(async (req, res, next) => {
 
 export const newProduct = TryCatch(
   async (req: Request<{}, {}, newProductRequestBody>, res, next) => {
-    try {
-      const { name, price, category, stock } = req.body;
-      const photo = req.file;
+    const { name, price, stock, category } = req.body;
+    const photo = req.file;
 
-      // Ensure photo is uploaded
-      if (!photo) {
-        return next(new ErrorHandler("Please upload an image", 400));
-      }
+    if (!photo) return next(new ErrorHandler("Please add Photo", 400));
 
-      // Create new product instance
-      const newProduct = new Product({
-        name,
-        price,
-        category: category.toLowerCase(),
-        stock,
-        photo: photo.path, // Assuming Multer provides the file path in req.file
+    if (!name || !price || !stock || !category) {
+      rm(photo.path, () => {
+        console.log("Deleted");
       });
 
-      // Save the new product to MongoDB
-      await newProduct.save();
-
-      // Invalidate cache
-      await invalidatesCache({ products: true, admin: true });
-
-      // Respond with success message
-      res.status(201).json({ success: true, message: "Product created successfully" });
-    } catch (error) {
-      console.error("Error creating product:", error);
-      next(error); // Pass error to error middleware
+      return next(new ErrorHandler("Please enter All Fields", 400));
     }
+
+    await Product.create({
+      name,
+      price,
+      stock,
+      category: category.toLowerCase(),
+      photo: photo.path,
+    });
+
+    invalidatesCache({ products: true, admin: true });
+
+    return res.status(201).json({
+      success: true,
+      message: "Product Created Successfully",
+    });
   }
 );
-
 export const updateProducts = TryCatch(async (req, res, next) => {
   const { id } = req.params;
 
