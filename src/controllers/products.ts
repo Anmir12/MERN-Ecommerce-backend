@@ -10,8 +10,10 @@ import ErrorHandler from "../utils/utility-class.js";
 import { rm } from "fs";
 import { myCache } from "../app.js";
 import { invalidatesCache } from "../utils/features.js";
-
-
+import {
+  uploadOnCloundinary,
+  deleteFromCloudinary,
+} from "../utils/cloudinary.js";
 
 //revalidate when new,update,delete and new order changes
 export const getlatestProducts = TryCatch(async (req, res, next) => {
@@ -112,19 +114,21 @@ export const newProduct = TryCatch(
     if (!photo) return next(new ErrorHandler("Please add Photo", 400));
 
     if (!name || !price || !stock || !category) {
-      rm(photo.path, () => {
-        console.log("Deleted");
-      });
-
-      return next(new ErrorHandler("Please enter All Fields", 400));
+        return next(new ErrorHandler("Please enter All Fields", 400));
     }
+
+    const avatar = await uploadOnCloundinary(photo?.path);
+
+    if (!avatar) return next(new ErrorHandler("file upload error", 500));
+
+
 
     await Product.create({
       name,
       price,
       stock,
       category: category.toLowerCase(),
-      photo: photo.path,
+      photo: avatar?.url,
     });
 
     invalidatesCache({ products: true, admin: true });
@@ -144,13 +148,20 @@ export const updateProducts = TryCatch(async (req, res, next) => {
   const photo = req.file;
 
   const product = await Product.findById(id);
+
   if (!product) return next(new ErrorHandler("no products found", 404));
 
+   let avatar;
+
   if (photo) {
-    rm(product.photo!, () => {
-      console.log("deleted old photo");
-    });
-    product.photo = photo.path;
+
+    await deleteFromCloudinary(product.photo!);
+
+    avatar = await uploadOnCloundinary(photo.path);
+
+    if (!avatar) return next(new ErrorHandler("file upload error", 500));
+
+    product.photo = avatar?.url;
   }
 
   if (name) product.name = name;
@@ -171,17 +182,12 @@ export const updateProducts = TryCatch(async (req, res, next) => {
 });
 
 export const deleteProduct = TryCatch(async (req, res, next) => {
-  const { id } = req.params;
 
-  if (!id) return next(new ErrorHandler("enter valid product id", 400));
-
-  const product = await Product.findById(id);
+  const product = await Product.findById(req.params.id);
 
   if (!product) return next(new ErrorHandler("no product found", 404));
 
-  rm(product.photo!, () => {
-    console.log("deleted old photo");
-  });
+   await deleteFromCloudinary(product.photo!)
 
   await product.deleteOne();
 
